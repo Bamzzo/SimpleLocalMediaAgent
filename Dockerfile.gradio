@@ -1,0 +1,7 @@
+FROM python:3.11-slim
+WORKDIR /app
+COPY pyproject.toml README.md ./
+COPY slmagent ./slmagent
+RUN pip install --no-cache-dir .
+EXPOSE 7860
+CMD ["python", "-m", "slmagent.apps.gradio_app"]

@@ -1,0 +1,45 @@
+# P0 defaults — not measured performance claims
+defaults:
+  content_type: 项目宣传片
+  visual_style: 科技未来
+  aspect_ratio: "16:9"
+  duration_sec: 5
+  camera_move: 缓慢推进
+  generation_mode: 首尾帧生视频
+  resolution: 768p
+
+demo_case:
+  project_name: 智影AIGC创作平台宣传镜头
+  description: >
+    智影是面向创作团队的 AIGC 视听创作平台，强调结构化分镜、关键帧与视频联动生成。
+    本镜头用于展示产品科技感与工作流自动化能力。
+  selling_points: 结构化分镜, 首尾帧约束, 本地化视频生成
+  audience: 高校创新团队与小型内容工作室
+  constraints: 单镜头5秒, 16:9, 768p, 科技未来风格
+
+options:
+  content_types:
+    - 产品广告
+    - 项目宣传片
+    - 概念短片
+    - AI短剧片段
+  visual_styles:
+    - 电影写实
+    - 科技未来
+    - 清新商业
+    - 国风
+    - 美术动画
+  aspect_ratios:
+    - "16:9"
+    - "9:16"
+    - "1:1"
+  camera_moves:
+    - 固定
+    - 缓慢推进
+    - 拉远
+    - 横移
+    - 环绕
+  generation_modes:
+    - 文生视频
+    - 首帧生视频
+    - 首尾帧生视频

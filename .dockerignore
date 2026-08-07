@@ -1,0 +1,18 @@
+# Secrets and local runtime state must never be sent to a Docker build context.
+.env
+.env.*
+!.env.example
+
+# Local environments, test caches, and generated media
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+runs/
+
+# VCS and editor metadata
+.git/
+.idea/
+.vscode/

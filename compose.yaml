@@ -1,0 +1,32 @@
+# Phase E placeholder — do not claim FLUX/H3 containers are ready.
+# Gradio / API can be containerized earlier; H3 should be last.
+
+services:
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile.api
+    ports:
+      - "8000:8000"
+    environment:
+      - LLM_MODE=mock
+      - GENERATION_BACKEND=mock
+      - RUNS_DIR=/app/runs
+    volumes:
+      - ./runs:/app/runs
+    profiles: ["phase-a-mock"]
+
+  gradio:
+    build:
+      context: .
+      dockerfile: Dockerfile.gradio
+    ports:
+      - "7860:7860"
+    environment:
+      - LLM_MODE=mock
+      - GENERATION_BACKEND=mock
+      - API_BASE_URL=http://api:8000
+      - RUNS_DIR=/app/runs
+    volumes:
+      - ./runs:/app/runs
+    profiles: ["phase-a-mock"]

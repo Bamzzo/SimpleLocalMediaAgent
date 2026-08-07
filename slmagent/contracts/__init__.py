@@ -1,0 +1,31 @@
+from slmagent.contracts.models import (
+    Brief,
+    CreativePlan,
+    ErrorRecord,
+    FinalManifest,
+    GenerationMode,
+    ImageJob,
+    ImagePrompt,
+    JobStatus,
+    QualityReport,
+    Shot,
+    Storyboard,
+    VideoJob,
+    VideoPrompt,
+)
+
+__all__ = [
+    "Brief",
+    "CreativePlan",
+    "ErrorRecord",
+    "FinalManifest",
+    "GenerationMode",
+    "ImageJob",
+    "ImagePrompt",
+    "JobStatus",
+    "QualityReport",
+    "Shot",
+    "Storyboard",
+    "VideoJob",
+    "VideoPrompt",
+]
