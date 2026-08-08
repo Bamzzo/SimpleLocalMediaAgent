@@ -144,7 +144,115 @@ $env:API_PIPELINE_TIMEOUT_SEC = "1800"
 $env:LIVE_VIDEO_TIMEOUT_SEC = "1800"
 ~~~
 
-之后重新启动 API 与 Gradio。详细的恢复、部署前提、资产校验和停服顺序见[归档、恢复与部署指南](docs/ARCHIVE_AND_DEPLOYMENT_GUIDE_ZH.md)。
+之后重新启动 API 与 Gradio。
+
+## 异地适配、恢复与部署
+
+本节面向不同机器、不同目的和不同风险等级的使用方式。两个归档包保存的是证据、版本 pin 和恢复线索；它们不包含模型权重、完整 CUDA、完整 Python 环境或任何凭据，因此不能解压后直接启动真实服务。
+
+### 场景 A：只在新电脑体验和开发 Mock
+
+这是最简单且默认推荐的路径，不需要 GPU、云服务器或模型权重：
+
+~~~powershell
+git clone https://github.com/Bamzzo/SimpleLocalMediaAgent.git
+Set-Location SimpleLocalMediaAgent
+python -m venv .venv
+.\\.venv\\Scripts\\Activate.ps1
+python -m pip install -e ".[dev]"
+Copy-Item .env.example .env
+python -m pytest -q
+~~~
+
+启动 FastAPI 和 Gradio 后，保持 GENERATION_BACKEND=mock。此模式仅验证产品工作流和媒体容器可用性，不调用真实 FLUX/H3。
+
+### 场景 B：只复核历史 P10 证据
+
+P10 包位于 archives/，包含两张真实 FLUX PNG、真实 H3 MP4、服务日志/PID、运行快照、接口契约和依赖摘要。先校验 tar：
+
+~~~powershell
+Get-FileHash archives\\p10_evidence_20260808_090019_AIGC_f25501.tar -Algorithm SHA256
+~~~
+
+预期哈希为：
+
+~~~text
+fad70402b3e9d90140a6a8a51535c933d8b6bfe82315daf1ef627fd237b43611
+~~~
+
+在 Linux/macOS 上，可将包解压到仓库外目录并校验内部清单：
+
+~~~bash
+mkdir -p ../slmagent-audit/p10
+tar -C ../slmagent-audit/p10 -xf archives/p10_evidence_20260808_090019_AIGC_f25501.tar
+cd ../slmagent-audit/p10/p10_evidence_20260808_090019_AIGC_f25501
+sha256sum -c MANIFEST.sha256
+~~~
+
+本地项目的 final_manifest.json 不在该 tar 中；它是本地编排事实来源，保留在 runs/<project_id>/。
+
+### 场景 C：在新云服务器恢复 H3 原生验证环境
+
+先阅读 slmagent-h3-cloud-adaptation-20260807.tar.gz 的 README、RESTORE_MANIFEST、版本 pin 和烟测记录。该包记录了一次 AutoDL 三卡 RTX 6000D 环境的成功路径，包括 SGLang/MiniMax-H3 commit、权重 revision、启动参数、请求 JSON、FFmpeg 验收和资源记录。
+
+恢复真实 H3 前必须完成以下工作：
+
+1. 准备足够 GPU、主机内存和磁盘的受控 Linux 实例。
+2. 按归档 pin 和上游官方文档重新获取模型权重、SGLang、CUDA toolkit 和 Python 依赖。
+3. 在新实例上先运行 NCCL/多卡和 H3 原生 FL2VA 烟测，不要直接接入应用。
+4. 确认 FFmpeg 和 ffprobe 可用；缺失 ffprobe 会使服务端后处理把已生成的 MP4 标记为失败。
+5. 仅让 H3 监听 127.0.0.1:30010，保留运行日志、请求、输出、哈希和资源快照。
+
+历史实例使用 GPU 1/2、双卡 TP、FL2VA、5 秒、短边 768、16:9 和分层卸载。这是已验证实例上的配置，不是所有 GPU/驱动环境的通用最优解。
+
+### 场景 D：在本地控制端连接远端 FLUX/H3
+
+云端必须先独立启动并验证：
+
+~~~text
+FLUX: 127.0.0.1:8001
+H3:   127.0.0.1:30010
+~~~
+
+在 Windows 本地建立两条 SSH 本地转发，保持两个窗口不关闭：
+
+~~~powershell
+ssh -N -o ExitOnForwardFailure=yes -L 18001:127.0.0.1:8001 -p <SSH_PORT> <USER>@<HOST>
+ssh -N -o ExitOnForwardFailure=yes -L 13011:127.0.0.1:30010 -p <SSH_PORT> <USER>@<HOST>
+~~~
+
+不要将真实主机、密码、令牌或私钥写进仓库。隧道建立后先验证：
+
+~~~powershell
+Invoke-RestMethod http://127.0.0.1:18001/health
+Invoke-RestMethod http://127.0.0.1:13011/health
+~~~
+
+随后在启动 API 和 Gradio 的本地 PowerShell 中设置 live 环境变量：
+
+~~~powershell
+$env:GENERATION_BACKEND = "live"
+$env:FLUX_SERVICE_URL = "http://127.0.0.1:18001"
+$env:H3_SERVICE_URL = "http://127.0.0.1:13011"
+$env:API_PIPELINE_TIMEOUT_SEC = "1800"
+$env:LIVE_VIDEO_TIMEOUT_SEC = "1800"
+$env:NO_PROXY = "127.0.0.1,localhost"
+$env:no_proxy = "127.0.0.1,localhost"
+~~~
+
+由于 H3 单次推理可能超过 13 分钟，API、Gradio 和两条隧道都必须保持运行；生成按钮只能点击一次。live 模式下，FLUX 先写云端首尾帧，H3 读取同一云端 run 的路径，最后 MP4 下载到本地 runs/<project_id>/。
+
+### 场景 E：归档后停止或释放云实例
+
+正确顺序是：
+
+1. 完成媒体、日志、PID、运行快照和环境摘要的证据包。
+2. 校验 tar 自身 SHA-256 和内部 MANIFEST.sha256。
+3. 将 tar 下载到本地并再次校验。
+4. 通过活跃 PID 文件向 FLUX 和 H3 发送 SIGTERM，确认端口关闭、scheduler 子进程退出、所有 GPU 回到 0 MiB。
+5. 在云服务商控制台确认“关机”与“释放实例”的计费语义后，再执行实例级操作。
+
+停止模型进程只释放 GPU 显存，不一定停止实例计费。不要使用宽泛的 pkill -9 -f python，也不要在本地证据未校验前释放实例。
 
 ## 资产与归档
 
@@ -155,7 +263,7 @@ $env:LIVE_VIDEO_TIMEOUT_SEC = "1800"
 | archives/p10_evidence_20260808_090019_AIGC_f25501.tar | P10 云端媒体、日志、PID、接口与环境摘要 | 模型、缓存、完整环境、凭据 |
 | slmagent-h3-cloud-adaptation-20260807.tar.gz | H3 原生 FL2VA 适配、版本锁定、烟测证据 | 约 144 GB 权重、CUDA、完整虚拟环境 |
 
-两个归档都必须先校验 SHA-256。它们是证据与恢复线索，不是可一键部署的完整模型镜像。
+两个归档都必须先校验 SHA-256。它们是证据与恢复线索，不是可一键部署的完整模型镜像。更完整的逐项说明见[归档、恢复与部署指南](docs/ARCHIVE_AND_DEPLOYMENT_GUIDE_ZH.md)。
 
 ## 目录
 
