@@ -31,6 +31,8 @@ class MockH3Backend:
         resolution: str = "768p",
         first_frame_path: str | None = None,
         last_frame_path: str | None = None,
+        first_frame_remote_path: str | None = None,
+        last_frame_remote_path: str | None = None,
     ) -> VideoJob:
         job_id = f"vid_{uuid.uuid4().hex[:12]}"
         job = VideoJob(
@@ -44,6 +46,8 @@ class MockH3Backend:
                 "resolution": resolution,
                 "first_frame_path": first_frame_path,
                 "last_frame_path": last_frame_path,
+                "first_frame_remote_path": first_frame_remote_path,
+                "last_frame_remote_path": last_frame_remote_path,
                 "backend": "mock",
             },
         )

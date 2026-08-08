@@ -1,4 +1,4 @@
-"""Gradio UI for SLMAgent Phase A."""
+"""Gradio UI for SLMAgent."""
 
 from __future__ import annotations
 
@@ -30,6 +30,80 @@ def _load_defaults() -> dict[str, Any]:
 DEF = _load_defaults()
 OPTS = DEF["options"]
 DEMO = DEF["demo_case"]
+
+
+def backend_mode_label(generation_backend: str | None = None) -> str:
+    """Return mock|live for media labels from GENERATION_BACKEND."""
+    backend = generation_backend or get_settings().generation_backend
+    return "live" if backend == "live" else "mock"
+
+
+def ui_status_banner(
+    generation_backend: str | None = None,
+    llm_mode: str | None = None,
+) -> str:
+    """Banner for Gradio page config at launch time (not a specific API run)."""
+    settings = get_settings()
+    backend = generation_backend or settings.generation_backend
+    llm = llm_mode or settings.resolved_llm_mode()
+    if backend == "live":
+        media_line = (
+            "当前页面配置：**Generation Backend = live**。"
+            "控件标签按此配置显示；单次运行完成后的结果摘要以 API 返回的实际值为准。"
+        )
+    else:
+        media_line = (
+            "当前页面配置：**Generation Backend = mock**。"
+            "控件标签按此配置显示；单次运行完成后的结果摘要以 API 返回的实际值为准。"
+        )
+    llm_line = (
+        f"当前页面 LLM 配置：`{llm}`。"
+        + (
+            " DeepSeek 结构化规划配置为 live。"
+            if llm == "live"
+            else " DeepSeek 规划配置为 mock，不能写成全真实 LLM 链路。"
+        )
+    )
+    return (
+        "# SLMAgent — Simple Local Media Agent\n"
+        "简易本地化智能视听创作智能体（P0 验证）\n\n"
+        f"{media_line}\n\n"
+        f"{llm_line}"
+    )
+
+
+def run_result_footnote(generation_backend: str, llm_mode: str) -> str:
+    """Footnote for a completed run; callers must pass API-reported modes."""
+    backend = "live" if generation_backend == "live" else "mock"
+    llm = "live" if llm_mode == "live" else "mock"
+    if backend == "live":
+        return (
+            f"说明：本次 API 运行 Generation Backend={backend}；LLM={llm}。"
+            "媒体结果来自真实适配器，不等于 OpenCLIP 阈值已校准，"
+            "也不等于 LLM 一定为 live。"
+        )
+    return (
+        f"说明：本次 API 运行 Generation Backend={backend}；LLM={llm}。"
+        "图像/视频为 Mock 占位，未宣称真实 FLUX/H3 画质。"
+    )
+
+
+def format_run_summary(result: dict[str, Any]) -> str:
+    """Build Gradio status text from /pipeline/run JSON (API is source of truth)."""
+    status = result.get("status", "unknown")
+    pid = result.get("project_id", "")
+    warnings = result.get("warnings") or []
+    backend = str(result.get("backend") or "mock")
+    llm_mode = str(result.get("llm_mode") or "mock")
+    return (
+        f"status={status}\n"
+        f"project_id={pid}\n"
+        f"backend={backend}\n"
+        f"llm_mode={llm_mode}\n"
+        f"warnings={warnings}\n"
+        f"manifest=runs/{pid}/final_manifest.json\n"
+        f"\n{run_result_footnote(backend, llm_mode)}"
+    )
 
 
 def _save_refs(files: Optional[list[Any]]) -> list[str]:
@@ -96,16 +170,7 @@ def run_job(
             f"技术信息：{exc}"
         )
         return message, None, None, None, message
-    status = result.get("status", "unknown")
-    pid = result.get("project_id", "")
-    warnings = result.get("warnings") or []
-    summary = (
-        f"status={status}\n"
-        f"project_id={pid}\n"
-        f"warnings={warnings}\n"
-        f"manifest=runs/{pid}/final_manifest.json\n"
-        f"\n说明：当前为 Phase A Mock，未部署真实 FLUX/H3。"
-    )
+    summary = format_run_summary(result)
     return (
         summary,
         result.get("first_frame_path"),
@@ -117,15 +182,9 @@ def run_job(
 
 def build_ui() -> gr.Blocks:
     settings = get_settings()
+    media_tag = backend_mode_label(settings.generation_backend)
     with gr.Blocks(title="SLMAgent — Simple Local Media Agent") as demo:
-        gr.Markdown(
-            """
-# SLMAgent — Simple Local Media Agent
-简易本地化智能视听创作智能体（P0 验证）
-
-当前运行：**Phase A 本地 Mock**。界面可走通完整链路；图像/视频为占位结果，不代表真实模型画质或速度。
-            """.strip()
-        )
+        gr.Markdown(ui_status_banner())
         with gr.Row():
             mode = gr.Radio(
                 choices=["自由创作模式", "剧本驱动模式"],
@@ -158,10 +217,16 @@ def build_ui() -> gr.Blocks:
                 run_btn = gr.Button("开始全自动生成", variant="primary")
             with gr.Column():
                 status_box = gr.Textbox(label="运行状态", lines=12)
-                first_img = gr.Image(label="首帧（mock）", type="filepath")
-                last_img = gr.Image(label="尾帧（mock）", type="filepath")
-                video_out = gr.Video(label="导出视频（mock）")
-                log_box = gr.Textbox(label="结果清单", lines=8)
+                first_img = gr.Image(
+                    label=f"首帧（页面配置:{media_tag}）",
+                    type="filepath",
+                )
+                last_img = gr.Image(
+                    label=f"尾帧（页面配置:{media_tag}）",
+                    type="filepath",
+                )
+                video_out = gr.Video(label=f"导出视频（页面配置:{media_tag}）")
+                log_box = gr.Textbox(label="结果清单（以 API 返回为准）", lines=8)
 
         run_btn.click(
             fn=run_job,
@@ -185,7 +250,9 @@ def build_ui() -> gr.Blocks:
         )
         gr.Markdown(
             f"API：`{settings.api_base_url}` ｜ "
-            f"LLM：`{settings.resolved_llm_mode()}` ｜ Backend：`{settings.generation_backend}`"
+            f"当前页面配置 LLM：`{settings.resolved_llm_mode()}` ｜ "
+            f"Backend：`{settings.generation_backend}`"
+            "（单次运行结果以 `/pipeline/run` 返回的 backend/llm_mode 为准）"
         )
     return demo
 

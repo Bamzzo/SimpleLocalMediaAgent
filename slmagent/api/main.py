@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-from pathlib import Path
 from typing import Any, Optional
 
 from fastapi import FastAPI, HTTPException
@@ -17,7 +16,7 @@ from slmagent.services.project_store import ProjectStore
 
 app = FastAPI(
     title="SLMAgent API",
-    description="Simple Local Media Agent — Phase A (mock generation)",
+    description="Simple Local Media Agent — Gradio/API/LangGraph orchestration",
     version=__version__,
 )
 
@@ -54,17 +53,33 @@ class PipelineResponse(BaseModel):
     last_frame_path: Optional[str] = None
     warnings: list[str] = Field(default_factory=list)
     manifest_path: Optional[str] = None
+    # Actual modes used by this pipeline run (from orchestrator state / manifest).
+    backend: str = "mock"
+    llm_mode: str = "mock"
 
 
 @app.get("/health")
 def health() -> dict[str, Any]:
     settings = get_settings()
+    backend = settings.generation_backend
+    llm_mode = settings.resolved_llm_mode()
+    if backend == "live":
+        note = (
+            "generation_backend=live; media adapters are live. "
+            f"llm_mode={llm_mode}. "
+            "OpenCLIP thresholds and full LLM-live planning are separate claims."
+        )
+    else:
+        note = (
+            "generation_backend=mock; media outputs are placeholders, "
+            "not a claim of real FLUX/H3 deployment."
+        )
     return {
         "ok": True,
         "version": __version__,
-        "generation_backend": settings.generation_backend,
-        "llm_mode": settings.resolved_llm_mode(),
-        "note": "Phase A mock — not a claim of real FLUX/H3 deployment",
+        "generation_backend": backend,
+        "llm_mode": llm_mode,
+        "note": note,
     }
 
 
@@ -90,7 +105,7 @@ def get_generation_job(job_id: str) -> dict[str, Any]:
 def pipeline_run(req: PipelineRequest) -> PipelineResponse:
     try:
         result = run_pipeline(req.brief)
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc)) from exc
     project_id = result["project_id"]
     store = ProjectStore()
@@ -103,6 +118,8 @@ def pipeline_run(req: PipelineRequest) -> PipelineResponse:
         last_frame_path=result.get("last_frame_path"),
         warnings=list(result.get("warnings") or []),
         manifest_path=str(manifest) if manifest.exists() else None,
+        backend=str(result.get("backend") or "mock"),
+        llm_mode=str(result.get("llm_mode") or "mock"),
     )
 
 

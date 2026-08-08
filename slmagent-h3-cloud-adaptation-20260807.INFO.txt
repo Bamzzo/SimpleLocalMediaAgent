@@ -1,0 +1,6 @@
+archive=/root/autodl-tmp/archives/slmagent-h3-cloud-adaptation-20260807.tar.gz
+stage_dir=/root/autodl-tmp/archives/slmagent-h3-cloud-adaptation-20260807
+archive_bytes=810280
+archive_sha256=a5a710718eb8d99c9737122d6a54f3e3fbfafd94b04ebc64e86a6106e778162b
+created=2026-08-07T22:21:46+08:00
+contents_root=slmagent-h3-cloud-adaptation-20260807

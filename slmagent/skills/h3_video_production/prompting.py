@@ -9,6 +9,8 @@ def build_video_prompt(
     *,
     first_frame_path: str | None,
     last_frame_path: str | None,
+    first_frame_remote_path: str | None = None,
+    last_frame_remote_path: str | None = None,
 ) -> VideoPrompt:
     shot = storyboard.shots[0]
     prompt = (
@@ -27,4 +29,6 @@ def build_video_prompt(
         aspect_ratio=brief.aspect_ratio.value,
         first_frame_path=first_frame_path,
         last_frame_path=last_frame_path,
+        first_frame_remote_path=first_frame_remote_path,
+        last_frame_remote_path=last_frame_remote_path,
     )

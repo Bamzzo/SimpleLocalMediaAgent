@@ -26,6 +26,8 @@ from slmagent.skills.h3_video_production.prompting import build_video_prompt
 
 
 def receive_input(state: AgentState) -> dict[str, Any]:
+    from datetime import UTC, datetime
+
     store = ProjectStore()
     brief = state["brief"]
     if isinstance(brief, dict):
@@ -47,6 +49,7 @@ def receive_input(state: AgentState) -> dict[str, Any]:
         brief = brief.model_copy(update={"reference_image_paths": saved_references})
     store.write_json(project_id, "brief.json", brief)
     settings = get_settings()
+    started_at = state.get("started_at") or datetime.now(UTC)
     return {
         "project_id": project_id,
         "project_root": project_root,
@@ -60,6 +63,7 @@ def receive_input(state: AgentState) -> dict[str, Any]:
         "video_attempts": 0,
         "backend": settings.generation_backend,
         "llm_mode": settings.resolved_llm_mode(),
+        "started_at": started_at,
         "current_node": "RECEIVE_INPUT",
         "status": "running",
     }
@@ -111,14 +115,14 @@ def prepare_image_prompt(state: AgentState) -> dict[str, Any]:
     }
 
 
-def _wait_job(job_id: str, timeout_sec: float = 60.0) -> Any:
+def _wait_job(job_id: str, timeout_sec: float = 60.0, poll_interval_sec: float = 0.15) -> Any:
     gen = get_generation_service()
     deadline = time.time() + timeout_sec
     while time.time() < deadline:
         job = gen.get_job(job_id)
         if job.status in (JobStatus.SUCCEEDED, JobStatus.FAILED):
             return job
-        time.sleep(0.15)
+        time.sleep(poll_interval_sec)
     job = gen.get_job(job_id)
     return job
 
@@ -138,6 +142,7 @@ def generate_image(state: AgentState) -> dict[str, Any]:
     warnings = list(state.get("warnings") or [])
     first_path = store.path(project_id, "images", "first_frame.png")
     last_path = store.path(project_id, "images", "last_frame.png")
+    remote_paths: dict[str, str] = {}
     gen = get_generation_service()
 
     ref = prompt.reference_image_paths[0] if prompt.reference_image_paths else None
@@ -162,6 +167,9 @@ def generate_image(state: AgentState) -> dict[str, Any]:
             done = _wait_job(job.job_id)
             jobs.append(done.model_dump(mode="json"))
             if done.status == JobStatus.SUCCEEDED:
+                remote_path = done.meta.get("remote_output_path")
+                if isinstance(remote_path, str):
+                    remote_paths[label] = remote_path
                 break
             attempt_local += 1
             attempts += 1
@@ -186,6 +194,8 @@ def generate_image(state: AgentState) -> dict[str, Any]:
     return {
         "first_frame_path": str(first_path) if first_path.exists() else None,
         "last_frame_path": str(last_path) if last_path.exists() else None,
+        "first_frame_remote_path": remote_paths.get("first_frame"),
+        "last_frame_remote_path": remote_paths.get("last_frame"),
         "jobs": jobs,
         "errors": errors,
         "warnings": warnings,
@@ -221,6 +231,8 @@ def prepare_video_prompt(state: AgentState) -> dict[str, Any]:
         state["storyboard"],
         first_frame_path=state.get("first_frame_path"),
         last_frame_path=state.get("last_frame_path"),
+        first_frame_remote_path=state.get("first_frame_remote_path"),
+        last_frame_remote_path=state.get("last_frame_remote_path"),
     )
     store = ProjectStore()
     store.write_json(state["project_id"], "prompts/video_prompt.json", video_prompt)
@@ -262,9 +274,16 @@ def generate_video(state: AgentState) -> dict[str, Any]:
                 "resolution": prompt.resolution,
                 "first_frame_path": prompt.first_frame_path,
                 "last_frame_path": prompt.last_frame_path,
+                "first_frame_remote_path": prompt.first_frame_remote_path,
+                "last_frame_remote_path": prompt.last_frame_remote_path,
             }
         )
-        done = _wait_job(job.job_id, timeout_sec=120.0)
+        live = settings.generation_backend == "live"
+        done = _wait_job(
+            job.job_id,
+            timeout_sec=settings.live_video_timeout_sec if live else 120.0,
+            poll_interval_sec=settings.live_poll_interval_sec if live else 0.15,
+        )
         jobs.append(done.model_dump(mode="json"))
         if done.status == JobStatus.SUCCEEDED:
             succeeded = True
@@ -342,13 +361,18 @@ def postprocess(state: AgentState) -> dict[str, Any]:
 
 
 def complete(state: AgentState) -> dict[str, Any]:
-    from datetime import datetime, timezone
+    from datetime import UTC, datetime
 
     warnings = list(state.get("warnings") or [])
     has_final = bool(state.get("final_video_path"))
     status = "completed" if has_final and not warnings else (
         "completed_with_warnings" if has_final else "failed"
     )
+    completed_at = datetime.now(UTC)
+    started_at = state.get("started_at") or completed_at
+    if isinstance(started_at, str):
+        started_at = datetime.fromisoformat(started_at)
+    # created_at tracks run start for new manifests (compat with older readers).
     manifest = FinalManifest(
         project_id=state["project_id"],
         project_name=state["brief"].project_name,
@@ -360,6 +384,8 @@ def complete(state: AgentState) -> dict[str, Any]:
         video_prompt=state.get("video_prompt"),
         first_frame_path=state.get("first_frame_path"),
         last_frame_path=state.get("last_frame_path"),
+        first_frame_remote_path=state.get("first_frame_remote_path"),
+        last_frame_remote_path=state.get("last_frame_remote_path"),
         raw_video_path=state.get("raw_video_path"),
         final_video_path=state.get("final_video_path"),
         jobs=list(state.get("jobs") or []),
@@ -368,11 +394,15 @@ def complete(state: AgentState) -> dict[str, Any]:
         timings_sec=dict(state.get("timings_sec") or {}),
         backend=state.get("backend") or "mock",
         llm_mode=state.get("llm_mode") or "mock",
-        completed_at=datetime.now(timezone.utc),
+        started_at=started_at,
+        created_at=started_at,
+        completed_at=completed_at,
     )
     store = ProjectStore()
     store.write_json(state["project_id"], "final_manifest.json", manifest)
     return {
         "status": status,
         "current_node": "COMPLETE",
+        "backend": manifest.backend,
+        "llm_mode": manifest.llm_mode,
     }

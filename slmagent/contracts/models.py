@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from enum import Enum
 from typing import Any, Literal, Optional
 
@@ -10,7 +10,7 @@ from pydantic import BaseModel, Field, field_validator
 
 
 def utc_now() -> datetime:
-    return datetime.now(timezone.utc)
+    return datetime.now(UTC)
 
 
 class ContentType(str, Enum):
@@ -136,6 +136,8 @@ class VideoPrompt(BaseModel):
     aspect_ratio: str = "16:9"
     first_frame_path: Optional[str] = None
     last_frame_path: Optional[str] = None
+    first_frame_remote_path: Optional[str] = None
+    last_frame_remote_path: Optional[str] = None
 
 
 class ImageJob(BaseModel):
@@ -195,6 +197,8 @@ class FinalManifest(BaseModel):
     video_prompt: Optional[VideoPrompt] = None
     first_frame_path: Optional[str] = None
     last_frame_path: Optional[str] = None
+    first_frame_remote_path: Optional[str] = None
+    last_frame_remote_path: Optional[str] = None
     raw_video_path: Optional[str] = None
     final_video_path: Optional[str] = None
     jobs: list[dict[str, Any]] = Field(default_factory=list)
@@ -203,5 +207,11 @@ class FinalManifest(BaseModel):
     timings_sec: dict[str, float] = Field(default_factory=dict)
     backend: str = "mock"
     llm_mode: str = "mock"
+    # Timing semantics (new runs):
+    # - started_at: RECEIVE_INPUT wall-clock start
+    # - created_at: same as started_at for new manifests (run creation / start)
+    # - completed_at: COMPLETE wall-clock finish
+    # Older manifests may omit started_at and may have created_at≈completed_at.
+    started_at: Optional[datetime] = None
     created_at: datetime = Field(default_factory=utc_now)
     completed_at: Optional[datetime] = None

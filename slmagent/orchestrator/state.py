@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from datetime import datetime
 from typing import Any, Optional, TypedDict
 
 from slmagent.contracts.models import (
@@ -25,6 +26,8 @@ class AgentState(TypedDict, total=False):
     video_prompt: Optional[VideoPrompt]
     first_frame_path: Optional[str]
     last_frame_path: Optional[str]
+    first_frame_remote_path: Optional[str]
+    last_frame_remote_path: Optional[str]
     raw_video_path: Optional[str]
     final_video_path: Optional[str]
     jobs: list[dict[str, Any]]
@@ -38,3 +41,4 @@ class AgentState(TypedDict, total=False):
     timings_sec: dict[str, float]
     backend: str
     llm_mode: str
+    started_at: datetime

@@ -48,4 +48,18 @@
 ## 2026-08-07 — Phase A final audit
 - Independently verified A.1 evidence: bundled ffmpeg is available, media probe reports a 5-second video, and the saved acceptance evidence records playable Mock output.
 - Independently verified A.2 evidence: three DeepSeek live JSON cases pass after normalizing numeric `shot_id`; `.env` is restored to mock generation and mock LLM mode.
-- Reran the automated suite: 4 passed. Phase A is formally closed; Phase B remains unstarted.
+- Reran the automated suite: 4 passed. Phase A is formally closed.
+
+## 2026-08-08 — P10 real media path (FLUX → H3 → Gradio)
+- Evidence run: `runs/20260808_090019_AIGC_f25501`
+- Manifest: `backend=live`, `llm_mode=mock` (DeepSeek planning still mock; not a full LLM-live claim)
+- Real FLUX first/last frames succeeded (`live_flux_http`); real H3 video succeeded (`live_h3_http`)
+- Final video probe: 1344x768, duration≈5.18s, has_audio=true; status `completed_with_warnings` (OpenCLIP / frame-similarity thresholds not calibrated)
+- Phase B/C/D media minimum evidence is no longer “unstarted”
+
+## 2026-08-08 — P10 local wrap-up fixes
+- Gradio banner/media labels/footnotes now follow `GENERATION_BACKEND` (live vs mock); live results must not be labeled mock
+- Manifest timing: record `started_at` at RECEIVE_INPUT; set `created_at=started_at`, `completed_at` at COMPLETE; legacy manifests without `started_at` still validate
+- API `/health` note also reflects live/mock backend
+- Docs updated: `task_plan.md`, `progress.md`, `findings.md`
+- Remaining: LLM-live in orchestration, OpenCLIP/similarity calibration, deployment stability, archival

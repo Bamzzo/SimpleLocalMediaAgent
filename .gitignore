@@ -16,3 +16,10 @@ runs/*
 Thumbs.db
 .idea/
 .vscode/
+
+# Canonical evidence archives are stored in archives/. Ignore duplicate
+# download/extraction copies placed at the repository root.
+/p10_evidence_*.tar
+/p10_evidence_*.tar.sha256
+/p10_evidence_*/
+/slmagent-h3-cloud-adaptation-20260807/

@@ -26,7 +26,10 @@ class Settings(BaseSettings):
 
     generation_backend: Literal["mock", "live"] = "mock"
     flux_service_url: str = "http://127.0.0.1:8001"
-    h3_service_url: str = "http://127.0.0.1:8002"
+    h3_service_url: str = "http://127.0.0.1:13011"
+    h3_model_path: str = "/root/autodl-tmp/models/MiniMax-H3"
+    live_video_timeout_sec: float = 1800.0
+    live_poll_interval_sec: float = 5.0
 
     runs_dir: Path = Field(default=ROOT / "runs")
     models_dir: Path = Path("/data/models")
